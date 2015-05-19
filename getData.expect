@@ -1,0 +1,24 @@
+#!/usr/bin/expect -f
+
+set command [list gatttool -b 20:cd:39:ad:e5:bc -I]
+spawn {*}$command
+expect "> " {
+	send "connect\n"
+}
+expect "Connection successful"
+expect "> " {
+	send "char-write-req 0x0035 3c4d65646973616e613030303100001f\n"
+}
+expect "Characteristic value was written successfully" {
+	send "char-write-req 0x0035 [lrange $argv 0 1]\n"
+}
+set timeout 15
+expect {
+	-re "Notification handle = 0x0038 value: 43 f0 .. .. .. 5f" return
+	timeout return
+}
+send "disconnect\n"
+expect "> " {
+	send "exit\n"
+}
+expect eof
