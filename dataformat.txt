@@ -1,0 +1,21 @@
+Enable "admin" mode:
+write @0x0035 3c4d65646973616e613030303100001f
+
+Request todays data:
+write @0x0035 43000000000000000000000000000043
+Request yesterdays data:
+write @0x0035 43010000000000000000000000000044
+...
+write @0x0035 430e0000000000000000000000000051
+
+Reply to data request:
+Notification @0x0038
+value: 43 f0 15 05 18 29 00 5d 0f 31 05 5d 00 00 00 8d 
+
+43 f0: Unknown, probably just indicator
+15 05 18: interprete as decimal, date of recording. Here: May 18th, 2015 (YY MM DD)
+29: index of recording. convert to decimal (here: 41) and divide by 4 to get timestamp (here: 10.25, read as: 10:15:00 AM to 10:29:59 AM).
+00: Type of recording. 00 == steps, ff == sleep
+5d 0f: unknown
+31 05: steps taken. Swap byte order (here 0531) then convert to decimal (here: 1329) to get steps taken.
+5d 00 00 8d: unknown, 8d **might** be a checksum.
