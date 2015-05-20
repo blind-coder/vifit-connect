@@ -10,9 +10,6 @@ expect "> " {
 	send "char-write-req 0x0035 3c4d65646973616e613030303100001f\n"
 }
 
-send_user "Sending: [lrange $argv 0 0]\n"
-send_user "Expecting: [lrange $argv 1 1]\n"
-
 expect "Characteristic value was written successfully" {
 	send "char-write-req 0x0035 [lrange $argv 0 0]\n"
 }
