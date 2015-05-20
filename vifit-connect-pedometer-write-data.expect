@@ -15,8 +15,8 @@ expect "Characteristic value was written successfully" {
 }
 
 expect {
-	"[lrange $argv 1 1]"
-	timeout
+	-re "[lrange $argv 1 1]" return
+	timeout return
 }
 send "disconnect\n"
 expect "> " {
