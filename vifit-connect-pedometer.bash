@@ -20,6 +20,7 @@ OPTFILE=""
 SETTIME="n"
 SETSTEPGOAL="0"
 SETPERSONAL="n"
+READSTEPS="n"
 
 # functions
 D2H=({{0..9},{A..F}}{{0..9},{A..F}})
@@ -45,11 +46,19 @@ function usage { # {{{
 	[[ ${#} -eq 1 ]] && exit ${1} || exit ${EXIT_FAILURE}
 }
 # }}}
+function verbose { #{{{
+	if [ "${VERBOSE}" == "n" ]; then
+		return
+	fi
+	echo "${@}"
+}
+# }}}
 
 function setTime { # {{{
 	time="01$(date "+%y%m%d%H%M%S")0000000000000000"
 	time="${time}$(getCkSum "${time}")"
-	./vifit-connect-pedometer-write-data.expect "${time}" "Characteristic value was written successfully"
+	verbose "Setting time to ${time:2:12}"
+	vifit-connect-pedometer-write-data.expect "${time}" "Characteristic value was written successfully"
 }
 # }}}
 function setStepGoal { #{{{
@@ -58,7 +67,8 @@ function setStepGoal { #{{{
 	goalHex="${D2H[$((${goal}/256))]}${goalHex}"
 	goalHex="0b00${goalHex}00000000000000000000000"
 	goalHex="${goalHex}$(getCkSum "${goalHex}")"
-	./vifit-connect-pedometer-write-data.expect "${goalHex}" "Characteristic value was written successfully"
+	verbose "Setting stepgoal to ${goal}"
+	vifit-connect-pedometer-write-data.expect "${goalHex}" "Characteristic value was written successfully"
 }
 #}}}
 function setPersonalData { # {{{
@@ -72,19 +82,49 @@ function setPersonalData { # {{{
 	stepLengthInCM=${D2H[${stepLengthInCM}]}
 	personalData="0201${ageInYears}${heightInCM}${weightInKG}${stepLengthInCM}000000000000000000"
 	personalData="${personalData}$(getCkSum "${personalData}")"
-	./vifit-connect-pedometer-write-data.expect "${personalData}" "Characteristic value was written successfully"
+	verbose "Setting personal data"
+	vifit-connect-pedometer-write-data.expect "${personalData}" "Characteristic value was written successfully"
+}
+# }}}
+function readSteps { # {{{
+	tmp="$(mktemp)"
+	for day in ${DAYS}; do
+		verbose "Reading pedometer data from $(date -d "-${day:2:2} day" +%Y-%m-%d)"
+		vifit-connect-pedometer-write-data.expect "${day}" "Notification handle = 0x0038 value: 43 f0 .. .. .. 5f" > "${tmp}"
+		if [ $( grep -c '0x0038 value: 43' "${tmp}" ) -lt 5 ]; then
+			verbose "No more records"
+			rm -f "${tmp}"
+			return
+		fi
+
+		while read yy mm dd idx type lsb msb; do
+			echo "$yy $mm $dd $idx $type $lsb $msb" > /dev/null
+			[ "${idx}" == "00" ] && echo -n > "20${yy}-${mm}-${dd}.log"
+			if [ "${type,,}" == "ff" ]; then
+				continue
+			fi
+			read t < <( hex2dec "${idx}" )
+			read steps < <( hex2dec "${msb}${lsb}" )
+			printf "%d %02d:%02d %s\n" ${t} $((${t}/4)) $((${t}%4*15)) "${steps}" >> "20${yy}-${mm}-${dd}.log"
+		done < <( grep -o '0x0038 value: 43.*$' "${tmp}" | cut -f05-7,8-9,12-13 -d' ' )
+	done
+	rm -f "${tmp}"
 }
 # }}}
 
-while getopts ':pts:h' OPTION ; do
+while getopts ':rpts:hv' OPTION ; do
 	case ${OPTION} in
 		h)	usage ${EXIT_SUCCESS}
+			;;
+		v) VERBOSE="y"
 			;;
 		p) SETPERSONAL="y"
 			;;
 		s) SETSTEPGOAL="${OPTARG//[^0-9]/}"
 			;;
 		t) SETTIME="y"
+			;;
+		r) READSTEPS="y"
 			;;
 		\?)	echo "unknown option \"-${OPTARG}\"." >&2
 			usage ${EXIT_ERROR}
@@ -98,8 +138,18 @@ while getopts ':pts:h' OPTION ; do
 	esac
 done
 
+if ! hash "vifit-connect-pedometer-write-data.expect" > /dev/null; then
+	export PATH=.:${PATH}
+	if ! hash "vifit-connect-pedometer-write-data.expect" > /dev/null; then
+		echo "Cannot find vifit-connect-pedometer-write-data.expect in PATH!" >&2
+		exit ${EXIT_FAILURE}
+	fi
+fi
+verbose "Found vifit-connect-pedometer-write-data.expect at $(which "vifit-connect-pedometer-write-data.expect")"
+
 [ "${SETTIME}" == "y" ] && setTime
 [ -n "${SETSTEPGOAL}" -a "${SETSTEPGOAL}" != "0" ] && setTime
 [ "${SETPERSONAL}" == "y" ] && setPersonalData
+[ "${READSTEPS}" == "y" ] && readSteps
 
 exit ${EXIT_SUCCESS}
