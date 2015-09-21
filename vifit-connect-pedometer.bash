@@ -45,7 +45,11 @@ function getCkSum { # {{{
 }
 # }}}
 function usage { # {{{
-	echo "Usage: ${SCRIPTNAME} [-h] [-v] [-o arg] file ..." >&2
+	echo "Usage: ${SCRIPTNAME} [-h] [-p] [-s <steps per day goal>] [-t] [-r]" >&2
+	echo "-p		Set personal data (age, height, weight, steplength" >&2
+	echo "-s		Set personal goal for steps per day" >&2
+	echo "-t		Sync time with computers time (might take a long while)" >&2
+	echo "-r		Read steps into textfiles YYYY-MM-DD.txt" >&2
 	[[ ${#} -eq 1 ]] && exit ${1} || exit ${EXIT_FAILURE}
 }
 # }}}
