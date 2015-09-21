@@ -14,6 +14,8 @@ EXIT_BUG=10
 
 DAYS="43000000000000000000000000000043 43010000000000000000000000000044 43020000000000000000000000000045 43030000000000000000000000000046 43040000000000000000000000000047 43050000000000000000000000000048 43060000000000000000000000000049 4307000000000000000000000000004a 4308000000000000000000000000004b 4309000000000000000000000000004c 430a000000000000000000000000004d 430b000000000000000000000000004e 430c000000000000000000000000004f 430d0000000000000000000000000050 430e0000000000000000000000000051"
 
+DELETEDAYS="070000000000000000000000000000 070100000000000000000000000000 070200000000000000000000000000 070300000000000000000000000000 070400000000000000000000000000 070500000000000000000000000000 070600000000000000000000000000 070700000000000000000000000000 070800000000000000000000000000 070900000000000000000000000000 070a00000000000000000000000000 070b00000000000000000000000000 070c00000000000000000000000000 070d00000000000000000000000000 070e00000000000000000000000000"
+
 # variables for option switches with default values
 VERBOSE="n"
 OPTFILE=""
@@ -21,6 +23,7 @@ SETTIME="n"
 SETSTEPGOAL="0"
 SETPERSONAL="n"
 READSTEPS="n"
+DELETE="n"
 
 # functions
 D2H=({{0..9},{A..F}}{{0..9},{A..F}})
@@ -89,32 +92,54 @@ function setPersonalData { # {{{
 function readSteps { # {{{
 	tmp="$(mktemp)"
 	for day in ${DAYS}; do
-		verbose "Reading pedometer data from $(date -d "-${day:2:2} day" +%Y-%m-%d)"
-		vifit-connect-pedometer-write-data.expect "${day}" "Notification handle = 0x0038 value: 43 f0 .. .. .. 5f" > "${tmp}"
-		if [ $( grep -c '0x0038 value: 43' "${tmp}" ) -lt 5 ]; then
-			verbose "No more records"
-			rm -f "${tmp}"
-			return
-		fi
-
-		while read yy mm dd idx type lsb msb; do
-			echo "$yy $mm $dd $idx $type $lsb $msb" > /dev/null
-			[ "${idx}" == "00" ] && echo -n > "20${yy}-${mm}-${dd}.log"
-			if [ "${type,,}" == "ff" ]; then
-				continue
+		while :; do
+			verbose "Reading pedometer data from $(date -d "-$( hex2dec ${day:2:2} ) day" +%Y-%m-%d)"
+			vifit-connect-pedometer-write-data.expect "${day}" "Notification handle = 0x0038 value: 43 f0 .. .. .. 5f" > "${tmp}"
+			if [ $( grep -c '0x0038 value: 43' "${tmp}" ) -lt 5 ]; then
+				verbose "No more records"
+				rm -f "${tmp}"
+				return
 			fi
-			read t < <( hex2dec "${idx}" )
-			read steps < <( hex2dec "${msb}${lsb}" )
-			printf "%d %02d:%02d %s\n" ${t} $((${t}/4)) $((${t}%4*15)) "${steps}" >> "20${yy}-${mm}-${dd}.log"
-		done < <( grep -o '0x0038 value: 43.*$' "${tmp}" | cut -f05-7,8-9,12-13 -d' ' )
+
+			success=0
+			while read yy mm dd idx type lsb msb; do
+				verbose "Got: $yy $mm $dd $idx $type $lsb $msb"
+				[ "${idx}" == "00" ] && echo -n > "20${yy}-${mm}-${dd}.log"
+				if [ "${type,,}" == "ff" ]; then
+					continue
+				fi
+				read t < <( hex2dec "${idx}" )
+				read steps < <( hex2dec "${msb}${lsb}" )
+				printf "%d %02d:%02d %s\n" ${t} $((${t}/4)) $((${t}%4*15)) "${steps}" >> "20${yy}-${mm}-${dd}.log"
+				if [ $( wc -l 20${yy}-${mm}-${dd}.log | cut -f1 -d' ' ) -eq 96 ]; then
+					success=1
+				else
+					success=0
+				fi
+			done < <( grep -o '0x0038 value: 43.*$' "${tmp}" | cut -f05-7,8-9,12-13 -d' ' )
+			[ ${success} -eq 1 ] && break
+		done
 	done
 	rm -f "${tmp}"
 }
 # }}}
+function deleteSteps { # {{{
+	for day in ${DELETEDAYS}; do
+		verbose "Deleting pedometer data from $(date -d "-$( hex2dec ${day:2:2} ) day" +%Y-%m-%d)"
+		vifit-connect-pedometer-write-data.expect "${day}$(getCkSum "${day}")" "Characteristic value was written successfully"
+		#if [ $( grep -c '0x0038 value: 43' "${tmp}" ) -lt 5 ]; then
+			#verbose "No more records"
+			#return
+		#fi
+	done
+}
+# }}}
 
-while getopts ':rpts:hv' OPTION ; do
+while getopts ':drpts:hv' OPTION ; do
 	case ${OPTION} in
 		h)	usage ${EXIT_SUCCESS}
+			;;
+		d) DELETE="y"
 			;;
 		v) VERBOSE="y"
 			;;
@@ -151,5 +176,6 @@ verbose "Found vifit-connect-pedometer-write-data.expect at $(which "vifit-conne
 [ -n "${SETSTEPGOAL}" -a "${SETSTEPGOAL}" != "0" ] && setTime
 [ "${SETPERSONAL}" == "y" ] && setPersonalData
 [ "${READSTEPS}" == "y" ] && readSteps
+[ "${DELETE}" == "y" ] && deleteSteps
 
 exit ${EXIT_SUCCESS}

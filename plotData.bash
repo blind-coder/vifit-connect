@@ -19,5 +19,22 @@ for log in "${@}"; do
 			echo -n > "${tmp2}"
 		fi
 	done < "${log}"
-	gnuplot -e "filename='${tmp}'" $(which plotData.gp) > "${log%log}png"
+	gnuplot > "${log%log}png" <<EOF
+set terminal png size 1280, 768 font "Times,12"
+set boxwidth 0.5
+set style fill solid
+set key off
+set title "${log%.log}"
+
+set xtics rotate by 270
+set yrange [0:*]
+set ylabel "Steps"
+
+set palette defined ( 0 "#FF0000", 10000 "#00FF00" )
+set cbrange[0:10000]
+
+filename="${tmp}"
+plot filename using 1:3:4:xtic(2) with boxes linecolor palette, \
+                filename using 1:3:(\$3 == 0 ? "" : \$3) with labels rotate by 270 lc "#000000"
+EOF
 done
