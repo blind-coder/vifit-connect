@@ -11,6 +11,10 @@ expect "> " {
 }
 
 expect "Characteristic value was written successfully" {
+	send "char-write-req 0x0039 0100\n";
+}
+
+expect "Characteristic value was written successfully" {
 	send "char-write-req 0x0035 [lrange $argv 0 0]\n"
 }
 
